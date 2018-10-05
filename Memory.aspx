@@ -13,6 +13,7 @@
         class MemoryStats
         {
             public string Info { get; set; }
+            public int ProcessId { get; set; }
             public string GCTotal { get; set; }
             public string WorkingSet { get; set; }
             public string PrivateMem { get; set; }
@@ -67,6 +68,7 @@
             var bytes2 = GC.GetTotalMemory(true); // force 
             var memoryStat = new MemoryStats
             {
+                ProcessId = process.Id,
                 GCTotal = bytes1.ToString("#,#") + " - " + bytes2.ToString("#,#"),
                 WorkingSet = process.WorkingSet64.ToString("#,#"),
                 PrivateMem = process.PrivateMemorySize64.ToString("#,#"),
@@ -87,6 +89,7 @@
             var memoryStat = new MemoryStats
             {
                 Info = "<span style=color:red>Peak Stats</span>",
+                ProcessId = process.Id,
                 WorkingSet = process.PeakWorkingSet64.ToString("#,#"),
                 VirtualMem = process.PeakVirtualMemorySize64.ToString("#,#"),
                 PagedMem = process.PeakPagedMemorySize64.ToString("#,#"),
@@ -105,7 +108,7 @@
         body { margin: 5px 10px;}
         #LogsCon {
             width: 100%;
-            height: 850px;
+            height: 800px;
             overflow: auto;
         }
 
@@ -133,7 +136,7 @@
         }
 
         .con {
-            margin: 6px 0;
+            margin: 8px 0;
         }
     </style>
 
@@ -143,6 +146,7 @@
                 <tr>
                     <th>Date/Time</th>
                     <th data-field="Info">Info</th>
+                    <th data-field="ProcessId">Process Id</th>
                     <th data-field="GCTotal">GC Total</th>
                     <th data-field="WorkingSet">WorkingSet</th>
                     <th data-field="PrivateMem">PrivateMem</th>
@@ -168,9 +172,15 @@
         <button id="btnGetPeakMemoryStats">Get Peak Memory Stats</button>
     </div>
     <div class="con">
+        <div style="float:left">
         Refresh Interval:
         <input type="text" id="txtInterval" value="10000" />
         ms.
+        </div>
+        <div style="float: left; margin-left: 10px">
+            <input type="checkbox" id="chkAutoScroll" checked="checked" />
+            <label for="chkAutoScroll">Auto Scroll List</label>
+        </div>
     </div>
 
     <script>
@@ -194,21 +204,36 @@
             var cells = fieldNames.map((i, item) => `<td>${data[item] || ''}</td>`).get();
             var cellsHtml = cells.join("");
             $logs.append(`<tr>${dateCellHtml}${cellsHtml}</tr>`);
-            scrollToBottom($("#LogsCon"));
+            if ($("#chkAutoScroll").is(':checked'))
+                scrollToBottom($("#LogsCon"));
         }
-        function performAjax(reqData) {
+        function performAjax(reqData, successCallback) {
             $.post("Memory.aspx", reqData, null, "json")
                 .done(function (data) {
                     UpdateResult(data);
-                }).fail(function (xhr) {
+                })
+                .done(successCallback)
+                .fail(function (xhr) {
                     UpdateResult(xhr.status + " " + xhr.statusText);
                 });
         }
+
+        var lastProcessId = null;
+        function checkAppPoolRecycle(data) {
+            if (lastProcessId == null) {
+                lastProcessId = data.ProcessId;
+                return;
+            }
+            if (data.ProcessId !== lastProcessId) {
+                lastProcessId = data.ProcessId;
+                UpdateResult({Info: "<span style='color:red; font-weight:bold'>App. Pool Recycled !</span>"});
+            }
+        }
         function GetMemoryStats() {
-            performAjax({ op: "GetMemoryStats" });
+            performAjax({ op: "GetMemoryStats" }, checkAppPoolRecycle);
         }
         function GetPeakMemoryStats() {
-            performAjax({ op: "GetPeakMemoryStats" });
+            performAjax({ op: "GetPeakMemoryStats" }, checkAppPoolRecycle);
         }
 
         function ForceGC() {
